@@ -146,16 +146,15 @@ class Bleachermark:
         
         - ``nruns`` - The number of times each 
         """
+        labels = [ l if l is not None else str(i) for (i,l) in
+                    zip(range(self.size(),[ b._label() for b in self._benchmarks])) ]
         for n in range(nruns):
             for i in range(len(self._benchmarks)):
                 bm = self._benchmarks[i]
-                label = bm._label()
-                if label is None:
-                    label = str(i)
-                obtdata = bm.run(self._runs[i])
+                obt_data = bm.run(self._runs[i])
                 fun_labels = bm._function_labels()
                 for j in range(len(fun_labels)):
-                    data = (label, fun_labels[j], self._runs[i], obtdata[0][j], obtdata[1][j])
+                    data = (labels[i], fun_labels[j], self._runs[i], obt_data[0][j], obt_data[1][j])
                     self._stored_data.append(data)
                 self._runs[i] += 1
                 
