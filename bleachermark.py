@@ -1,5 +1,9 @@
 r"""
-A Bleachermark is formed by a collection of benchmarks.
+The Bleachermark package
+
+A Bleachermark is a collection of benchmarks. A benchmark is a single pipeline
+of functions, often randomized in one or more functions, whose performance and
+data one wishes to perform statistics on.
 
 EXAMPLE::
 
