@@ -7,7 +7,8 @@ data one wishes to perform statistics on.
 
 EXAMPLE::
 
-    >>> import math
+    >>> from bleachermark import *
+    >>> import math, random
     >>> def data_gen(i):
     ...     random.seed(i)
     ...     return random.random()
@@ -16,7 +17,7 @@ EXAMPLE::
     >>> pipeline = [data_gen, f1, math.cos, f1, f1, math.sin]
     >>> B = Benchmark(pipeline, label='benchmark 1')
     >>> zero_pipeline = [lambda i: i, lambda i: 0]
-    >>> B2 = Benchmark(zero_pipeline, label='stupid benchmark', fun_labels=['identity', 'zero']
+    >>> B2 = Benchmark(zero_pipeline, label='stupid benchmark', fun_labels=['identity', 'zero'])
     >>> BB = Bleachermark((B, B2))
     >>> BB.run(2)
     >>> BB.fetch_data()
@@ -120,9 +121,9 @@ class Bleachermark:
         """
         if isinstance(benchmarks, Benchmark):
             self._benchmarks = (benchmarks, )
-        elif instance(benchmarks, (list, tuple)) and all [isinstance(i, Benchmark) for i in benchmarks]:
+        elif isinstance(benchmarks, (list, tuple)) and all([isinstance(i, Benchmark) for i in benchmarks]):
             self._benchmarks = tuple(benchmarks)
-        elif instance(benchmarks, (list, tuple)) and all [isinstance(i, (list, tuple)) for i in benchmarks]:
+        elif isinstance(benchmarks, (list, tuple)) and all([isinstance(i, (list, tuple)) for i in benchmarks]):
             self._benchmarks = tuple(Benchmark(i) for i in benchmarks)
         else:
             self._benchmark = (Benchmark(benchmarks),)
