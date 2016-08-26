@@ -131,7 +131,10 @@ class Bleachermark:
         self._runs = {i: 0 for i in range(len(self._benchmarks))}
     
     def __repr__(self):
-        return 'Collection of {} benchmarks'.format(len(self._benchmarks))
+        return 'Collection of {} benchmarks'.format(self.size())
+
+    def size(self):
+        return len(self._benchmarks)
     
     def run(self, nruns = 100): # This is the part that should need the most work: lots of options about how to run it
         # For the moment it just runs all the benchmarks the same number of times
