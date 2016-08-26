@@ -20,29 +20,43 @@ EXAMPLE::
     >>> B2 = Benchmark(zero_pipeline, label='stupid benchmark', fun_labels=['identity', 'zero'])
     >>> BB = Bleachermark((B, B2))
     >>> BB.run(2)
-    >>> BB.fetch_data()
-    (('benchmark 1', 0, 0, 5.3999999999998494e-05, 0.8444218515250481),
-    ('benchmark 1', 1, 0, 2.9999999999752447e-06, -0.1313735881920577),
-    ('benchmark 1', 2, 0, 5.999999999950489e-06, 0.9913828944313534),
-    ('benchmark 1', 3, 0, 5.000000000254801e-06, -0.008542851060265422),
-    ('benchmark 1', 4, 0, 2.000000000279556e-06, 0.0086158313645033),
-    ('benchmark 1', 5, 0, 2.000000000279556e-06, 0.00861572476904337),
-    ('stupid benchmark', 'identity', 0, 2.000000000279556e-06, 0),
-    ('stupid benchmark', 'zero', 0, 6.000000000394579e-06, 0),
-    ('benchmark 1', 0, 1, 6.100000000008876e-05, 0.13436424411240122),
-    ('benchmark 1', 1, 1, 1.000000000139778e-06, -0.11631049401650427),
-    ('benchmark 1', 2, 1, 1.000000000139778e-06, 0.9932435564834237),
-    ('benchmark 1', 3, 1, 1.000000000139778e-06, -0.006710793987583674),
-    ('benchmark 1', 4, 1, 4.000000000115023e-06, 0.006755828743527464),
-    ('benchmark 1', 5, 1, 2.000000000279556e-06, 0.006755777352931481),
-    ('stupid benchmark', 'identity', 1, 1.000000000139778e-06, 1),
-    ('stupid benchmark', 'zero', 1, 1.9999999998354667e-06, 0))
-
-
-
+    >>> BB.fetch_data("dict")
+    {'benchmark 1': [[(1.6000000000016e-05, 0.8444218515250481),
+    (1.0000000000287557e-06, -0.1313735881920577),
+    (8.000000000008e-06, 0.9913828944313534),
+    (0.0, -0.008542851060265422),
+    (0.0, 0.0086158313645033),
+    (0.0, 0.00861572476904337)],
+    [(1.0999999999983245e-05, 0.13436424411240122),
+    (1.0000000000287557e-06, -0.11631049401650427),
+    (0.0, 0.9932435564834237),
+    (0.0, -0.006710793987583674),
+    (1.0000000000287557e-06, 0.006755828743527464),
+    (1.0000000000287557e-06, 0.006755777352931481)]],
+    'stupid benchmark': [[(1.0000000000287557e-06, 0),
+    (9.999999999177334e-07, 0)],
+    [(0.0, 1), (0.0, 0)]]}
+    >>> BB.fetch_data("flat")
+    [('benchmark 1', '0', 0, 1.7000000000044757e-05, 0.8444218515250481),
+    ('benchmark 1', '1', 0, 9.999999999177334e-07, -0.1313735881920577),
+    ('benchmark 1', '2', 0, 6.000000000061512e-06, 0.9913828944313534),
+    ('benchmark 1', '3', 0, 0.0, -0.008542851060265422),
+    ('benchmark 1', '4', 0, 9.999999999177334e-07, 0.0086158313645033),
+    ('benchmark 1', '5', 0, 1.0000000000287557e-06, 0.00861572476904337),
+    ('benchmark 1', '0', 1, 2.8000000000028002e-05, 0.13436424411240122),
+    ('benchmark 1', '1', 1, 1.0000000000287557e-06, -0.11631049401650427),
+    ('benchmark 1', '2', 1, 9.999999999177334e-07, 0.9932435564834237),
+    ('benchmark 1', '3', 1, 1.0000000000287557e-06, -0.006710793987583674),
+    ('benchmark 1', '4', 1, 2.0000000000575113e-06, 0.006755828743527464),
+    ('benchmark 1', '5', 1, 0.0, 0.006755777352931481),
+    ('stupid benchmark', 'identity', 0, 9.999999999177334e-07, 0),
+    ('stupid benchmark', 'zero', 0, 0.0, 0),
+    ('stupid benchmark', 'identity', 1, 0.0, 1),
+    ('stupid benchmark', 'zero', 1, 0.0, 0)]
 """
 
 from time import clock
+from copy import copy
 
 
 class Benchmark():
@@ -66,7 +80,7 @@ class Benchmark():
         if not isinstance(pipeline, (list, tuple)):
             raise TypeError("Pipeline must be a list or tuple of functions")
         self._pipeline = tuple(pipeline)
-        self._blabel = label
+        self._label = label
         if fun_labels is None:
             self._fun_labels = tuple(str(i) for i in range(len(self._pipeline)))
         else:
@@ -77,13 +91,31 @@ class Benchmark():
             self._fun_labels = tuple(fun_labels)
         
     def __repr__(self):
-        return 'Benchmark for a pipeline of {} functions'.format(len(self._pipeline))
-    
-    def _label(self):
-        return self._blabel
+        if self.label():
+            return 'Benchmark %s'.format(self.label())
+        else:
+            return 'Benchmark for a pipeline of {} functions'.format(len(self._pipeline))
+
+    def label(self):
+        r"""
+        Return the label (name) for this benchmark.
+        """
+        return self._label
+
+    def _set_label(self, label):
+        self._label = label
         
-    def _function_labels(self):
+    def function_labels(self):
+        r"""
+        Return the functions' labels for this benchmark.
+        """
         return self._fun_labels
+
+    def pipeline(self):
+        r"""
+        Return the pipeline of functions of this benchmark.
+        """
+        return self._pipeline
     
     def run(self, i):
         r"""
@@ -96,18 +128,17 @@ class Benchmark():
                   
         OUTPUT:
         
-        - A list of the time that each element of the pipeline took, and a tuple
-          of the values produced by the functions in the pipeline.
+        - A list of pairs, with one pair for each part of the pipeline. The
+          first element of each pair is the time that this part of the
+          pipeline took, and the second is the value it output.
         """
-        timings = []
-        values = []
+        time_vals = []
         intervalue = i
         for fun in self._pipeline:
             tim = clock()
             intervalue = fun(intervalue)
-            timings.append(clock()-tim)
-            values.append(intervalue)
-        return timings, values
+            time_vals.append( (clock()-tim,  intervalue) )
+        return time_vals
         
 
 
@@ -127,8 +158,11 @@ class Bleachermark:
             self._benchmarks = tuple(Benchmark(i) for i in benchmarks)
         else:
             self._benchmark = (Benchmark(benchmarks),)
-        self._stored_data = []
-        self._runs = {i: 0 for i in range(len(self._benchmarks))}
+
+        for n, b in zip(range(self.size()), self._benchmarks):
+            if b.label() is None:
+                b._set_label(str(n))
+        self._measurements = { b.label(): [] for b in self._benchmarks }  # benchmark label -> ((timing, value) list) list
     
     def __repr__(self):
         return 'Collection of {} benchmarks'.format(self.size())
@@ -147,26 +181,59 @@ class Bleachermark:
         - ``nruns`` - The number of times each 
         """
         labels = [ l if l is not None else str(i) for (i,l) in
-                    zip(range(self.size(),[ b._label() for b in self._benchmarks])) ]
+                    zip(range(self.size()),[ b.label() for b in self._benchmarks]) ]
+        measurements  = self._measurements
+        
         for n in range(nruns):
             for i in range(len(self._benchmarks)):
-                bm = self._benchmarks[i]
-                obt_data = bm.run(self._runs[i])
-                fun_labels = bm._function_labels()
-                for j in range(len(fun_labels)):
-                    data = (labels[i], fun_labels[j], self._runs[i], obt_data[0][j], obt_data[1][j])
-                    self._stored_data.append(data)
-                self._runs[i] += 1
+                benchmark = self._benchmarks[i]
+                label = benchmark.label()
+                m = benchmark.run(n)
+                measurements[label].append(m)
                 
-    
-    def clean_data(self):
+    def clear(self):
         r"""
-        Cleans the stored data
+        Forget all measurements.
         """
-        self._stored_data = []
-    
-    def fetch_data(self):
+        self._measurements = []
+
+    def fetch_data(self, format="dict"):
         r"""
-        Get the stored data
+        Return all the measured data.
+
+        INPUT:
+
+        - ``format`` - (optional, default: "dict") specify the format to return
+          the data in. If set to "dict", return a dictionary from Benchmark
+          label to list of measurements, each measurement being as the output of
+          ``Benchmark.run``. If set to "flat", return a list of tuples of the
+          format ``(benchmark label, run-no, pipeline-part, timing, output)``.
         """
-        return tuple(self._stored_data)
+        measurements = self._measurements
+        if format == "dict":
+            #TODO: Really copy?
+            return copy(measurements)
+        elif format == "flat":
+            data = []
+            for benchmark in self._benchmarks:
+                label = benchmark.label()
+                fun_labels = benchmark.function_labels()
+                for run in range(len(measurements[label])):
+                    for i in range(len(benchmark.pipeline())):
+                        m = measurements[label][run][i]
+                        data.append( (label, fun_labels[i], run, m[0], m[1]) )
+            return data
+        else:
+            raise ValueError("Invalid argument to format: %s".format(format))
+
+    def timings(self):
+        r"""
+        Return all measured timings.
+        """
+        raise NotImplementedError
+    
+    def pipeline_data(self):
+        r"""
+        Get the data through the pipeline of all benchmarks and runs.
+        """
+        raise NotImplementedError
