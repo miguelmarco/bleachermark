@@ -142,6 +142,14 @@ class Benchmark():
         
 
 
+def _make_autolabel(n):
+    r"""
+    Return a generic label for a benchmark with count n
+    """
+    return "[%s]" % n
+
+_autolabel_regex = r"\[[0-9]*\]"
+
 
 class Bleachermark:
     def __init__(self, benchmarks):
@@ -161,7 +169,7 @@ class Bleachermark:
 
         for n, b in zip(range(self.size()), self._benchmarks):
             if b.label() is None:
-                b._set_label(str(n))
+                b._set_label(_make_autolabel(n))
         self._measurements = { b.label(): [] for b in self._benchmarks }  # benchmark label -> ((timing, value) list) list
     
     def __repr__(self):
@@ -237,3 +245,37 @@ class Bleachermark:
         Get the data through the pipeline of all benchmarks and runs.
         """
         raise NotImplementedError
+
+    def __add__(self, other):
+        r"""
+        Add two Bleachermarks, concatenating their benchmarks.
+        
+        Note that this does not lose existing measurement data.
+        """
+        import re
+        my_labels = set( b.label() for b in self._benchmarks )
+        ot_labels = set( b.label() for b in other._benchmarks )
+        collisions = my_labels.intersect(ot_labels)
+        if collisions:
+            autolabel = re.compile(_autolabel_regex)
+            counter = self.size()
+            for label in collisions:
+                if autolabel.match(label):
+                    #Change name of other's benchmark
+                    other.benchmark(label)._set_label(_make_autolabel(counter))
+                    counter += 1
+                else:
+                    raise ValueError("Label collision on label %s" % label)
+
+        #Now benchmarks can just be concatenated
+        self._benchmarks.extend(other._benchmarks)
+        for b in other._benchmarks:
+            assert not b.label() in self._measurements
+            self._measurements[b.label()] = other._measurements[b.label()]
+        
+        
+            
+
+
+
+            
