@@ -8,30 +8,32 @@ data one wishes to perform statistics on.
 EXAMPLE::
 
     >>> import math
-    >>> def gener(i):
+    >>> def data_gen(i):
     ...     random.seed(i)
     ...     return random.random()
     >>> def f1(x):
     ...     return x*x - x
-    >>> B = Benchmark([gener, f1, math.cos, f1, f1, math.sin], name = 'becnhmark 1')
-    >>> B2 = Benchmark([lambda i: i, lambda i: 0], name='stupid benchmark', funnames=['identity', 'zero']
+    >>> pipeline = [data_gen, f1, math.cos, f1, f1, math.sin]
+    >>> B = Benchmark(pipeline, label='benchmark 1')
+    >>> zero_pipeline = [lambda i: i, lambda i: 0]
+    >>> B2 = Benchmark(zero_pipeline, label='stupid benchmark', fun_labels=['identity', 'zero']
     >>> BB = Bleachermark((B, B2))
     >>> BB.run(2)
     >>> BB.fetch_data()
-    (('becnhmark 1', 0, 0, 5.3999999999998494e-05, 0.8444218515250481),
-    ('becnhmark 1', 1, 0, 2.9999999999752447e-06, -0.1313735881920577),
-    ('becnhmark 1', 2, 0, 5.999999999950489e-06, 0.9913828944313534),
-    ('becnhmark 1', 3, 0, 5.000000000254801e-06, -0.008542851060265422),
-    ('becnhmark 1', 4, 0, 2.000000000279556e-06, 0.0086158313645033),
-    ('becnhmark 1', 5, 0, 2.000000000279556e-06, 0.00861572476904337),
+    (('benchmark 1', 0, 0, 5.3999999999998494e-05, 0.8444218515250481),
+    ('benchmark 1', 1, 0, 2.9999999999752447e-06, -0.1313735881920577),
+    ('benchmark 1', 2, 0, 5.999999999950489e-06, 0.9913828944313534),
+    ('benchmark 1', 3, 0, 5.000000000254801e-06, -0.008542851060265422),
+    ('benchmark 1', 4, 0, 2.000000000279556e-06, 0.0086158313645033),
+    ('benchmark 1', 5, 0, 2.000000000279556e-06, 0.00861572476904337),
     ('stupid benchmark', 'identity', 0, 2.000000000279556e-06, 0),
     ('stupid benchmark', 'zero', 0, 6.000000000394579e-06, 0),
-    ('becnhmark 1', 0, 1, 6.100000000008876e-05, 0.13436424411240122),
-    ('becnhmark 1', 1, 1, 1.000000000139778e-06, -0.11631049401650427),
-    ('becnhmark 1', 2, 1, 1.000000000139778e-06, 0.9932435564834237),
-    ('becnhmark 1', 3, 1, 1.000000000139778e-06, -0.006710793987583674),
-    ('becnhmark 1', 4, 1, 4.000000000115023e-06, 0.006755828743527464),
-    ('becnhmark 1', 5, 1, 2.000000000279556e-06, 0.006755777352931481),
+    ('benchmark 1', 0, 1, 6.100000000008876e-05, 0.13436424411240122),
+    ('benchmark 1', 1, 1, 1.000000000139778e-06, -0.11631049401650427),
+    ('benchmark 1', 2, 1, 1.000000000139778e-06, 0.9932435564834237),
+    ('benchmark 1', 3, 1, 1.000000000139778e-06, -0.006710793987583674),
+    ('benchmark 1', 4, 1, 4.000000000115023e-06, 0.006755828743527464),
+    ('benchmark 1', 5, 1, 2.000000000279556e-06, 0.006755777352931481),
     ('stupid benchmark', 'identity', 1, 1.000000000139778e-06, 1),
     ('stupid benchmark', 'zero', 1, 1.9999999998354667e-06, 0))
 
@@ -47,7 +49,7 @@ class Benchmark():
     A Benchmark is a pipeline of functions.
     
     """
-    def __init__(self, l, name = None, funnames = None):
+    def __init__(self, pipeline, label=None, fun_labels = None):
         r"""
         Initializes the Benchmark
         
@@ -55,32 +57,32 @@ class Benchmark():
         
         -  ``l`` - the list of functions in the Benchmark.
         
-        - ``name`` - the name of the benchmark.
+        - ``label`` - the name of the benchmark.
         
-        - ``funnames`` - the names of the functions. If it is nit given,
+        - ``fun_labels`` - the names of the functions. If it is nit given,
           they will be named by their index.
         """
-        if not isinstance(l, (list, tuple)):
-            raise TypeError("A list or tuple of functions must be provided")
-        self._pipeline = tuple(l)
-        self._bname = name
-        if funnames is None:
-            self._funnames = tuple(str(i) for i in range(len(self._pipeline)))
+        if not isinstance(pipeline, (list, tuple)):
+            raise TypeError("Pipeline must be a list or tuple of functions")
+        self._pipeline = tuple(pipeline)
+        self._blabel = label
+        if fun_labels is None:
+            self._fun_labels = tuple(str(i) for i in range(len(self._pipeline)))
         else:
-            if not isinstance(funnames, (list, tuple)):
-                raise TypeError("The names of the functions must be given in a list or tuple")
-            if len(funnames) != len(self._pipeline):
-                raise ValueError("There must be as many names as functions")
-            self._funnames = tuple(funnames)
+            if not isinstance(fun_labels, (list, tuple)):
+                raise TypeError("The labels of the functions must be given in a list or tuple")
+            if len(fun_labels) != len(self._pipeline):
+                raise ValueError("There must be as many labels as functions")
+            self._fun_labels = tuple(fun_labels)
         
     def __repr__(self):
         return 'Benchmark for a pipeline of {} functions'.format(len(self._pipeline))
     
-    def _name(self):
-        return self._bname
+    def _label(self):
+        return self._blabel
         
-    def _function_names(self):
-        return self._funnames
+    def _function_labels(self):
+        return self._fun_labels
     
     def run(self, i):
         r"""
@@ -143,13 +145,13 @@ class Bleachermark:
         for n in range(nruns):
             for i in range(len(self._benchmarks)):
                 bm = self._benchmarks[i]
-                name = bm._name()
-                if name is None:
-                    name = str(i)
+                label = bm._label()
+                if label is None:
+                    label = str(i)
                 obtdata = bm.run(self._runs[i])
-                funnames = bm._function_names()
-                for j in range(len(funnames)):
-                    data = (name, funnames[j], self._runs[i], obtdata[0][j], obtdata[1][j])
+                fun_labels = bm._function_labels()
+                for j in range(len(fun_labels)):
+                    data = (label, fun_labels[j], self._runs[i], obtdata[0][j], obtdata[1][j])
                     self._stored_data.append(data)
                 self._runs[i] += 1
                 
