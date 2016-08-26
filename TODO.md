@@ -3,3 +3,5 @@
 - Handle interruption and resume
 - Add basic statistical treatment of the stored data
 - Write setup.py and so on to make this a pip installable package
+- Decide on memory nightmare for Bleachermark.__add__
+- 

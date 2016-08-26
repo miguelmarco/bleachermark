@@ -170,8 +170,10 @@ class Bleachermark:
         for n, b in zip(range(self.size()), self._benchmarks):
             if b.label() is None:
                 b._set_label(_make_autolabel(n))
-        self._measurements = { b.label(): [] for b in self._benchmarks }  # benchmark label -> ((timing, value) list) list
-    
+        # benchmark label -> ((timing, value) list) list
+        # (time, value) = self._measurements[bm.label()][run_no][pipeline_part]
+        self.clear()
+
     def __repr__(self):
         return 'Collection of {} benchmarks'.format(self.size())
 
@@ -203,7 +205,7 @@ class Bleachermark:
         r"""
         Forget all measurements.
         """
-        self._measurements = []
+        self._measurements = { b.label(): [] for b in self._benchmarks }
 
     def fetch_data(self, format="dict"):
         r"""
@@ -265,17 +267,19 @@ class Bleachermark:
                     other.benchmark(label)._set_label(_make_autolabel(counter))
                     counter += 1
                 else:
-                    raise ValueError("Label collision on label %s" % label)
+                    raise ValueError("Collision on label %s" % label)
 
         #Now benchmarks can just be concatenated
         self._benchmarks.extend(other._benchmarks)
         for b in other._benchmarks:
             assert not b.label() in self._measurements
-            self._measurements[b.label()] = other._measurements[b.label()]
+            self._measurements[b.label()] = copy(other._measurements[b.label()]) #TODO: deepcopy?
+
+        return self
         
         
             
 
-
-
-            
+if __name__ == "__main__":
+    import doctest
+    doctest.testmod()
