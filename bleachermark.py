@@ -46,8 +46,12 @@ class Bleachermark:
         """
         if isinstance(benchmarks, Benchmark):
             self._benchmarks = (benchmarks, )
-        else:
+        elif instance(benchmarks, (list, tuple)) and all [isinstance(i, Benchmark) for i in benchmarks]:
             self._benchmarks = tuple(benchmarks)
+        elif instance(benchmarks, (list, tuple)) and all [isinstance(i, (list, tuple)) for i in benchmarks]:
+            self._benchmarks = tuple(Benchmark(i) for i in benchmarks)
+        else:
+            self._benchmark = (Benchmark(benchmarks),)
         self._stored_data = []
         self._runs = {i: 0 for i in range(len(self._benchmarks))}
     

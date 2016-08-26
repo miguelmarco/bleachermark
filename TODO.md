@@ -1,0 +1,5 @@
+- Add all the smart logic for choosing how to order the runs of benchmarks
+- Add parallelism
+- Handle interruption and resume
+- Add basic statistical treatment of the stored data
+- Write setup.py and so on to make this a pip installable package
