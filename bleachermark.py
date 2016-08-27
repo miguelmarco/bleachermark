@@ -92,7 +92,7 @@ class Benchmark():
         
     def __repr__(self):
         if self.label():
-            return 'Benchmark %s'.format(self.label())
+            return 'Benchmark {}'.format(self.label())
         else:
             return 'Benchmark for a pipeline of {} functions'.format(len(self._pipeline))
 
@@ -157,7 +157,7 @@ class Bleachermark:
         elif isinstance(benchmarks, (list, tuple)) and all([isinstance(i, (list, tuple)) for i in benchmarks]):
             self._benchmarks = tuple(Benchmark(i) for i in benchmarks)
         else:
-            self._benchmark = (Benchmark(benchmarks),)
+            self._benchmarks = (Benchmark(benchmarks),)
 
         for n, b in zip(range(self.size()), self._benchmarks):
             if b.label() is None:
@@ -229,8 +229,38 @@ class Bleachermark:
     def timings(self):
         r"""
         Return all measured timings.
+        
+        OUTPUT: 
+          
+          - a dictionary whose keys are the labels of the benchmarks.
+          The value for each benchmark is a list corresponding to the runs.
+          For each run, there is a list of the timings of the different 
+          components of the pipeline.
+         
         """
-        raise NotImplementedError
+        di = self.fetch_data()
+        return {bm:[[t[0] for t in run] for run in di[bm]] for bm in di.keys()}
+    
+    def averages(self):
+        r"""
+        Return the averages of the timings.
+        
+        OUTPUT:
+        
+          - A dictionary whose keys are the benchmarks. The value for each benchmark
+          is a list with the averages of the corresponding parts of the pipeline.
+    
+        """
+        timings = self.timings()
+        res = {}
+        for bm in timings.keys():
+            l = len(timings[bm][0])
+            totals = [0 for i in range(l)]
+            for run in timings[bm]:
+                for i in range(l):
+                    totals[i] += run[i]
+            res[bm] = [t / len(timings[bm]) for t in totals]
+        return res
     
     def pipeline_data(self):
         r"""
