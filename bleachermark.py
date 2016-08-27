@@ -189,7 +189,7 @@ class Bleachermark:
                 benchmark = self._benchmarks[i]
                 label = benchmark.label()
                 m = benchmark.run(n)
-                measurements[label].append(m)
+                measurements[label].append(copy(m))
                 
     def clear(self):
         r"""
@@ -226,10 +226,15 @@ class Bleachermark:
         else:
             raise ValueError("Invalid argument to format: %s".format(format))
 
-    def timings(self):
+    def timings(self, transposed=False):
         r"""
         Return all measured timings.
         
+        INPUT:
+        
+         - ``transposed`` - (default = False), determines weather the data must
+            be transposed
+    
         OUTPUT: 
           
           - a dictionary whose keys are the labels of the benchmarks.
@@ -239,7 +244,10 @@ class Bleachermark:
          
         """
         di = self.fetch_data()
-        return {bm:[[t[0] for t in run] for run in di[bm]] for bm in di.keys()}
+        res =  {bm:[[t[0] for t in run] for run in di[bm]] for bm in di.keys()}
+        if not transposed:
+            return res
+        return {bm:[[row[i] for row in res[bm]] for i in range(len(res[bm][0]))] for bm in res.keys()}
     
     def averages(self):
         r"""
@@ -251,16 +259,51 @@ class Bleachermark:
           is a list with the averages of the corresponding parts of the pipeline.
     
         """
-        timings = self.timings()
+        timings = self.timings(transposed=True)
         res = {}
         for bm in timings.keys():
-            l = len(timings[bm][0])
-            totals = [0 for i in range(l)]
-            for run in timings[bm]:
-                for i in range(l):
-                    totals[i] += run[i]
-            res[bm] = [t / len(timings[bm]) for t in totals]
+            totals = map(lambda a: sum(a)/len(a), timings[bm])
+            res[bm] = totals
         return res
+
+    def variances(self):
+        r"""
+        Return the variances of the timings of the benchmarks
+        """
+        timings = self.timings(transposed=True)
+        averages = self.averages()
+        res = {}
+        for bm in timings.keys():
+            timbm = timings[bm]
+            avgbm = averages[bm]
+            lbm = []
+            for (timpart, avgpart) in zip(timbm, avgbm):
+                deviations = [(l - avgpart)**2 for l in timpart]
+                lbm.append(sum(deviations)/len(deviations))
+            res[bm] = lbm
+        return res
+    
+    def stdvs(self):
+        r"""
+        Return the standard deviations of the timings.
+        """
+        variances = self.variances()
+        import math
+        return {bm:map(math.sqrt, variances[bm]) for bm in variances}
+    
+    def maxes(self):
+        r"""
+        Return the maximum running times of the benchmarks run.
+        """
+        timings = self.timings(transposed=True)
+        return {bm:map(max, timings[bm]) for bm in timings}
+    
+    def mins(self):
+        r"""
+        Return the minimum running times of the benchmarks run.
+        """
+        timings = self.timings(transposed=True)
+        return {bm:map(min, timings[bm]) for bm in timings}
     
     def pipeline_data(self):
         r"""
