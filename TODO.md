@@ -3,3 +3,6 @@
 - Handle interruption and resume
 - Add basic statistical treatment of the stored data
 - Write setup.py and so on to make this a pip installable package
+- Deciding possible paralellization frameworks. Some options are:
+    - Take a look at https://wiki.python.org/moin/ParallelProcessing.
+    - Decouple the SageMath parallel framework into a separate package

@@ -58,6 +58,19 @@ EXAMPLE::
 from time import clock
 from copy import copy
 
+#This part handles the ctrl-c interruption. It works in ipython
+#but not in sage (apparently sage sets up its own signal handling)
+#we need to investigate this.
+class CTRLC(Exception):
+    def __init__(self):
+        pass
+
+import signal
+
+def signal_ctrl_c(signal, frame):
+    raise CTRLC
+
+signal.signal(signal.SIGINT, signal_ctrl_c)
 
 class Benchmark():
     r"""
@@ -163,6 +176,7 @@ class Bleachermark:
             if b.label() is None:
                 b._set_label(str(n))
         self._measurements = { b.label(): [] for b in self._benchmarks }  # benchmark label -> ((timing, value) list) list
+        self._current_runner = None
     
     def __repr__(self):
         return 'Collection of {} benchmarks'.format(self.size())
@@ -170,8 +184,9 @@ class Bleachermark:
     def size(self):
         return len(self._benchmarks)
     
-    def run(self, nruns = 100): # This is the part that should need the most work: lots of options about how to run it
-        # For the moment it just runs all the benchmarks the same number of times
+    def run(self, nruns = 100): # Refactored to the runnners model
+        # This function should create a runner according to the passed parameters and run it
+        # For the moment it just uses the serial runner with the parameter nruns
         # No automatic tweaking, no parallelism, no nothing
         r"""
         Runs the benchmarks in the collection and stores the returned data
@@ -180,16 +195,31 @@ class Bleachermark:
         
         - ``nruns`` - The number of times each 
         """
+        runner = SerialRunner(self, nruns)
+        self._run_runner(runner)
+                
+    def _run_runner(self, runner):
+        r"""
+        Runs the runner and stores the measurements produced
+        """
+        self._current_runner = runner
         labels = [ l if l is not None else str(i) for (i,l) in
                     zip(range(self.size()),[ b.label() for b in self._benchmarks]) ]
-        measurements  = self._measurements
+        measurements = self._measurements
+        for r in runner:
+            try:
+                label = labels[r[1]]
+                measurements[label].append(r[0])
+            except CTRLC:
+                break
+
         
-        for n in range(nruns):
-            for i in range(len(self._benchmarks)):
-                benchmark = self._benchmarks[i]
-                label = benchmark.label()
-                m = benchmark.run(n)
-                measurements[label].append(copy(m))
+    def resume(self):
+        r"""
+        Resumes the running of the benchmarks if they were interrupted
+        """
+        self._run_runner(self._current_runner)
+                
                 
     def clear(self):
         r"""
@@ -310,3 +340,49 @@ class Bleachermark:
         Get the data through the pipeline of all benchmarks and runs.
         """
         raise NotImplementedError
+    
+    
+#RUNNERS
+# Runners are essentially iterators that produce the data that the bleachermark will store.
+#They should support the following interface:
+# They are created by passing the bleachermark that created them, and the specific parameters of the runner 
+# They act as iterators that yield the results of the benchmarks.
+# - The format of the return is a tuple (index, results), where
+#   - index is the index of the benchmark
+#   - results is the result of running the benchmark
+# It is the runners work to decide how to order the benchmarks, call them in parallel and so on
+
+class SerialRunner:
+    r"""
+    Example of Runner. It just runs the each benchmark of the bleachermark as many times as indicated.
+    It most likey will be the default one
+    """
+    def __init__(self, bleachermark, iterations):
+        r"""
+        INPUT:
+        
+        - ``bleachermark`` - The bleachermark that calls it.
+        
+        - ``iterations`` - The number of 
+        """
+        self._bleachermark = bleachermark
+        self._niter = iterations
+        self._benchmarks = bleachermark._benchmarks
+        self._queue = [(i, j) for i in range(iterations) for j in range(len(self._benchmarks))]
+    
+    def __iter__(self):
+        return self
+    
+    def __repr__(self):
+        return 'Serial Runner of {} instances for {}'.format(self._niter, self._bleachermark)
+    
+    def next(self):
+        if not self._queue:
+            raise StopIteration()
+        else:
+            runid, benchmarkid = self._queue[0]
+            res = self._benchmarks[benchmarkid].run(runid)
+            self._queue.pop(0)   # We don't remove from the queue until right before returning to be more robust with resumes
+            return (res, benchmarkid)
+        
+        
