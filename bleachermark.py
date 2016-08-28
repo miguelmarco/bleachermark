@@ -210,7 +210,7 @@ class Bleachermark:
             try:
                 label = labels[r[1]]
                 measurements[label].append(r[0])
-            except CTRLC:
+            except CTRLC, KeyboardInterrupt:
                 break
 
         
@@ -225,7 +225,7 @@ class Bleachermark:
         r"""
         Forget all measurements.
         """
-        self._measurements = []
+        self._measurements = { b.label(): [] for b in self._benchmarks }  # benchmark label -> ((timing, value) list) list
 
     def fetch_data(self, format="dict"):
         r"""
