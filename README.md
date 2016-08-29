@@ -3,7 +3,7 @@ A pipeline, parallel, interleaving benchmarking framework for Python
 
 ## Interface:
 
-Two classes:
+Three classes:
 
  - Benchmark:
    - Created from a list of callable objects (typically functions), each one accepting as input the output of the previous one.
@@ -11,11 +11,14 @@ Two classes:
    - Exposes a .run() method that runs the benchmark and returns the timings and values produced by each part of the pipeline.
  - Bleachermark:
    - Essentially a collection of benchmarks
-   - Handles the running of them in a smart way (parallelizing, interleaving runs, and so on)
-   - Store the timings for each run of each benchmark
-   - Fetches the data provided by each run of each benchmark, and stores it
+   - Calls a runner to run them, and gets the results.
+   - Store the timings and data for each run of each benchmark
    - Can do simple statistics over the stored data, or return the data to be processed by more specialized tools (pandas?)
    - Allows interrupt and resume gracefully.
+ - Runners:
+   - Meant to be created by the bleachermark
+   - Runs the benchmark according to a strategy specific for each runner.
+   - Returns the results according to the iterator protocol.
 
 ## Dependencies:
 
