@@ -58,9 +58,7 @@ EXAMPLE::
 from time import clock
 from copy import copy
 
-#This part handles the ctrl-c interruption. It works in ipython
-#but not in sage (apparently sage sets up its own signal handling)
-#we need to investigate this.
+#This part handles the ctrl-c interruption. 
 class CTRLC(Exception):
     def __init__(self):
         pass
@@ -184,6 +182,55 @@ class Bleachermark:
     def size(self):
         return len(self._benchmarks)
     
+    def __iter__(self):   # Implement iterator behaviour
+        return self
+    
+    def next(self):      # Should we store the result?
+        return self._current_runner.next()
+    
+    __next__ = next
+    
+    def set_runner(self, runner, *args, **kwargs):
+        r"""
+        Set the runner to be used when the bleachermark is used as an iterator:
+        
+        INPUT:
+        
+        - ``runner`` - the constructor of the runner to be set.
+        
+        - ``*args`` - the arguments to be passed to the constructor of the runner.
+        
+        - ``**kwargs`` - the ketword arguments to be pased to the constructor of the runner.
+        
+        EXAMPLES::
+        
+            >>> from bleachermark import *
+            >>> import math, random
+            >>> def data_gen(i):
+            ...     random.seed(i)
+            ...     return random.random()
+            >>> def f1(x):
+            ...     return x*x - x
+            >>> pipeline = [data_gen, f1, math.cos]
+            >>> B = Benchmark(pipeline, label='benchmark 1')
+            >>> zero_pipeline = [lambda i: i, lambda i: 0]
+            >>> B2 = Benchmark(zero_pipeline, label='stupid benchmark', fun_labels=['identity', 'zero'])
+            >>> BB = Bleachermark((B, B2))
+            >>> BB.set_runner(SerialRunner, 100)
+            >>> BB.next()
+            ([(2.2999999999884224e-05, 0.8444218515250481),
+              (2.0000000000575113e-06, -0.1313735881920577),
+              (2.9999999999752447e-06, 0.9913828944313534)],
+             0)
+            >>> BB.next()
+            ([(3.999999999892978e-06, 0), (2.9999999999752447e-06, 0)], 1)
+            
+        This way, the bleachermark can be used as part of a bigger pipeline (for instance,
+        feeding output to another engine that makes statistical analyisis, or plots.
+        """
+        runner = runner(self, *args, **kwargs)
+        self._current_runner = runner
+    
     def run(self, nruns = 100): # Refactored to the runnners model
         # This function should create a runner according to the passed parameters and run it
         # For the moment it just uses the serial runner with the parameter nruns
@@ -196,22 +243,22 @@ class Bleachermark:
         - ``nruns`` - The number of times each 
         """
         runner = SerialRunner(self, nruns)
-        self._run_runner(runner)
+        self._current_runner = runner
+        self._run_runner()
                 
-    def _run_runner(self, runner):
+    def _run_runner(self):
         r"""
         Runs the runner and stores the measurements produced
         """
-        self._current_runner = runner
         labels = [ l if l is not None else str(i) for (i,l) in
                     zip(range(self.size()),[ b.label() for b in self._benchmarks]) ]
         measurements = self._measurements
-        for r in runner:
+        for r in self._current_runner:
             try:
                 label = labels[r[1]]
                 measurements[label].append(r[0])
             except CTRLC, KeyboardInterrupt:
-                break
+                return
 
         
     def resume(self):
@@ -368,7 +415,8 @@ class SerialRunner:
         self._bleachermark = bleachermark
         self._niter = iterations
         self._benchmarks = bleachermark._benchmarks
-        self._queue = [(i, j) for i in range(iterations) for j in range(len(self._benchmarks))]
+        self._current_iter = 0
+        self._current_benchmark = 0
     
     def __iter__(self):
         return self
@@ -377,12 +425,17 @@ class SerialRunner:
         return 'Serial Runner of {} instances for {}'.format(self._niter, self._bleachermark)
     
     def next(self):
-        if not self._queue:
+        if self._current_iter >= self._niter:
             raise StopIteration()
         else:
-            runid, benchmarkid = self._queue[0]
+            runid = self._current_iter
+            benchmarkid = self._current_benchmark
             res = self._benchmarks[benchmarkid].run(runid)
-            self._queue.pop(0)   # We don't remove from the queue until right before returning to be more robust with resumes
+            if self._current_benchmark == len(self._benchmarks) - 1:
+                self._current_benchmark = 0
+                self._current_iter += 1
+            else:
+                self._current_benchmark += 1
             return (res, benchmarkid)
         
         
