@@ -254,11 +254,12 @@ class Bleachermark:
         labels = [ l if l is not None else str(i) for (i,l) in
                     zip(range(self.size()),[ b.label() for b in self._benchmarks]) ]
         measurements = self._measurements
-        for r in self._current_runner:
+        while True:
             try:
-                label = labels[r[1]]
-                measurements[label].append(r[0])
-            except CTRLC, KeyboardInterrupt:
+                r = self._current_runner.next()
+                label = labels[r[0]]
+                measurements[label].append(r[1])
+            except (StopIteration, CTRLC, KeyboardInterrupt):
                 return
 
 
@@ -425,18 +426,24 @@ class SerialRunner:
         else:
             runid = self._current_iter
             benchmarkid = self._current_benchmark
-            res = self._benchmarks[benchmarkid].run(runid)
+            res = (benchmarkid, self._benchmarks[benchmarkid].run(runid))
             if self._current_benchmark == len(self._benchmarks) - 1:
                 self._current_benchmark = 0
                 self._current_iter += 1
             else:
                 self._current_benchmark += 1
             return (res, benchmarkid)
+        
+    __next__ = next
 
 class ListRunner:
     r"""
     Runner based on a list. You just pass a list of the runid's you want to pass
     to your benchmarks, and it takes care of it.
+    
+    EXAMPLE::
+    
+        
     """
     def __init__(self, bleachermark, runids):
         r"""
@@ -465,4 +472,50 @@ class ListRunner:
             self._currentid = self._idqueue.next()
         else:
             self._nbench += 1
-        return self._benchmarks[self._nbench].run(self._currentid)
+        return (self._nbench, self._benchmarks[self._nbench].run(self._currentid))
+    
+    __next__ = next
+    
+class ParallelRunner:
+    r"""
+    This runner uses sage parallel utility.
+    It profiles each benchmark and decides how many runs can fit in a chunk of about two
+    seconds. Then it computes these chunks in parallel.
+    
+    As input, it takes a list or tuple of the inputs that will be given to the benchmarks.
+    """
+    def __init__(self, bleachermark, runs):
+        from sage.parallel.decorate import parallel
+        from sage.functions.other import ceil, floor
+        self._benchmarks = bleachermark._benchmarks        
+        # profiling we run each benchmark once
+        self._totaltime = reduce(lambda a,b: a+b, [r[0] for bm in self._benchmarks for r in bm.run(runs[0])[1:]])
+        #divide the runs in chunks
+        self._chunksize = ceil(2.0 / self._totaltime)
+        self._nchunks = floor(len(runs)/self._chunksize)
+        self._chunks = [runs[i*self._chunksize:(i+1)*self._chunksize] for i in range(self._nchunks)]
+        if (self._nchunks)*self._chunksize < len(runs):
+            self._chunks.append(runs[(self._nchunks)*self._chunksize:])
+        # we define the parallel function
+        @parallel
+        def f(indices):
+            results = []
+            for frun in indices:
+                for i in range(len(self._benchmarks)):
+                    bm = self._benchmarks[i]
+                    res = bm.run(frun)
+                    results.append((i, res))
+            return results
+        self._getchunks = f(self._chunks)
+        self._currentchunk = []
+        
+    def __iter__(self):
+        return self
+    
+    def next(self):
+        if not self._currentchunk:
+            self._currentchunk = self._getchunks.next()[1]
+        res = self._currentchunk.pop()
+        return res
+
+    __next__ = next
