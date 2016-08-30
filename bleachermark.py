@@ -432,7 +432,7 @@ class SerialRunner:
                 self._current_iter += 1
             else:
                 self._current_benchmark += 1
-            return (becnhmarkid, res)
+            return (benchmarkid, res)
         
     __next__ = next
 
