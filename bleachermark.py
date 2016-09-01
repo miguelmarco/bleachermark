@@ -59,14 +59,14 @@ from time import clock
 from copy import copy
 
 #This part handles the ctrl-c interruption.
-class CTRLC(Exception):
-    def __init__(self):
-        pass
+#class CTRLC(Exception):
+    #def __init__(self):
+        #pass
 
 import signal
 
 def signal_ctrl_c(signal, frame):
-    raise CTRLC
+    raise KeyboardInterrupt
 
 signal.signal(signal.SIGINT, signal_ctrl_c)
 
@@ -229,12 +229,11 @@ class Bleachermark:
             >>> BB = Bleachermark((B, B2))
             >>> BB.set_runner(SerialRunner, 100)
             >>> BB.next()
-            ([(2.2999999999884224e-05, 0.8444218515250481),
+            (0, (0, (2.2999999999884224e-05, 0.8444218515250481),
               (2.0000000000575113e-06, -0.1313735881920577),
-              (2.9999999999752447e-06, 0.9913828944313534)],
-             0)
+              (2.9999999999752447e-06, 0.9913828944313534)))
             >>> BB.next()
-            ([(3.999999999892978e-06, 0), (2.9999999999752447e-06, 0)], 1)
+            (0, (1, (3.999999999892978e-06, 0), (2.9999999999752447e-06, 0)))
 
         This way, the bleachermark can be used as part of a bigger pipeline (for instance,
         feeding output to another engine that makes statistical analyisis, or plots.
@@ -269,7 +268,7 @@ class Bleachermark:
                 r = self._current_runner.next()
                 label = labels[r[0]]
                 measurements[label].append(r[1])
-            except (StopIteration, CTRLC, KeyboardInterrupt):
+            except (StopIteration, KeyboardInterrupt):
                 return
 
 
@@ -396,7 +395,7 @@ class Bleachermark:
     def __add__(self, other):
         r"""
         Add two Bleachermarks, concatenating their benchmarks.
-        
+
         Note that this does not lose existing measurement data.
         """
         raise NotImplementedError("Not verified since Runner system")
@@ -422,9 +421,9 @@ class Bleachermark:
             self._measurements[b.label()] = copy(other._measurements[b.label()]) #TODO: deepcopy?
 
         return self
-        
-        
-            
+
+
+
 
 #RUNNERS
 # Runners are essentially iterators that produce the data that the bleachermark will store.
@@ -474,18 +473,17 @@ class SerialRunner:
                 self._current_iter += 1
             else:
                 self._current_benchmark += 1
-            return (benchmarkid, res)
-        
+            return res
     __next__ = next
 
 class ListRunner:
     r"""
     Runner based on a list. You just pass a list of the runid's you want to pass
     to your benchmarks, and it takes care of it.
-    
+
     EXAMPLE::
-    
-        
+
+
     """
     def __init__(self, bleachermark, runids):
         r"""
@@ -515,21 +513,21 @@ class ListRunner:
         else:
             self._nbench += 1
         return (self._nbench, self._benchmarks[self._nbench].run(self._currentid))
-    
+
     __next__ = next
-    
+
 class ParallelRunner:
     r"""
     This runner uses sage parallel utility.
     It profiles each benchmark and decides how many runs can fit in a chunk of about two
     seconds. Then it computes these chunks in parallel.
-    
+
     As input, it takes a list or tuple of the inputs that will be given to the benchmarks.
     """
     def __init__(self, bleachermark, runs):
         from sage.parallel.decorate import parallel
         from sage.functions.other import ceil, floor
-        self._benchmarks = bleachermark._benchmarks        
+        self._benchmarks = bleachermark._benchmarks
         # profiling we run each benchmark once
         self._totaltime = reduce(lambda a,b: a+b, [r[0] for bm in self._benchmarks for r in bm.run(runs[0])[1:]])
         #divide the runs in chunks
@@ -550,10 +548,10 @@ class ParallelRunner:
             return results
         self._getchunks = f(self._chunks)
         self._currentchunk = []
-        
+
     def __iter__(self):
         return self
-    
+
     def next(self):
         if not self._currentchunk:
             self._currentchunk = self._getchunks.next()[1]
