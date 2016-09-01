@@ -181,7 +181,7 @@ class Bleachermark:
 
         for n, b in zip(range(self.size()), self._benchmarks):
             if b.label() is None:
-                b._set_label(_make_autolabel(n))
+                b._set_label(_make_autolabel(n))  # WARNING!!! This could have side effects if the same benchmark is in more than one bleachermark!!!
         # benchmark label -> ((timing, value) list) list
         # (time, value) = self._measurements[bm.label()][run_no][pipeline_part]
         self.clear()
@@ -233,7 +233,7 @@ class Bleachermark:
               (2.0000000000575113e-06, -0.1313735881920577),
               (2.9999999999752447e-06, 0.9913828944313534)))
             >>> BB.next()
-            (0, (1, (3.999999999892978e-06, 0), (2.9999999999752447e-06, 0)))
+            (1, (0, (3.999999999892978e-06, 0), (2.9999999999752447e-06, 0)))
 
         This way, the bleachermark can be used as part of a bigger pipeline (for instance,
         feeding output to another engine that makes statistical analyisis, or plots.
@@ -560,6 +560,61 @@ class ParallelRunner:
 
     __next__ = next
 
+class AdaptativeRunner:
+    r"""
+    Runner that decides the runs to make adaptitvely to produce
+    the best possible overview of how does the timing of each benchmark
+    deppend on its input.
+
+    It is assumed that the runid will correspond to the size of the input
+
+    For the moment, the strategy followed is the following: try the measures to
+    expand aa range as big as possible, but making sure that two consecutive runid's
+    have timings that don't differ by a factor bigger than 1.5
+    (unless they are consecutive integers).
+    """
+    def __init__(self, bleachermark, totruns = 100):
+        self._benchmarks=bleachermark._benchmarks
+        self._timings = {i:[] for i in range(len(self._benchmarks))}
+        self._curbm = 0
+        self._pendingruns = totruns
+
+    def repr(self):
+        return "Adaptative Runner for {} benchmarks".format(len(self._benchmarks))
+
+    def __iter__(self):
+        return self
+
+    def next(self):
+        if self._pendingruns < 0:
+            raise StopIteration
+        self._pendingruns -= 1
+        i = self._curbm
+        # this part decides j, which is the next runid to run
+        if not self._timings[i]:
+            j = 1
+            ii = 0
+        elif len(self._timings[i]) == 1: # we need at least values for 1 and 2
+            j = 2
+            ii = 1
+        else: #now we check if two consecutive runids have enough space between
+            for ii in range(len(self._timings[i])):
+                if ii == len(self._timings[i])-1:
+                    j = 2 * self._timings[i][-1][0]
+                else:
+                    i0, t0 = self._timings[i][ii]
+                    i1, t1 = self._timings[i][ii+1]
+                    if (i1 > i0+1) and (t1/t0 > 1.5 or t0/t1 > 1.5):
+                        j = int((i0 + i1)/2)
+                        break
+        # now we run, store and return it
+        res = self._benchmarks[i].run(j)
+        tottime = sum([r[0] for r in res[1:]])
+        self._timings[i].insert(ii+1, (j, tottime))
+        self._curbm = (i+1) % len(self._benchmarks)
+        return (i, res)
+
+    __next__ = next
 
 
 
