@@ -1,10 +1,9 @@
-# Benchmark/Bleachermark design suggestion
+# Benchmark/Bleachermark design
 
 - Having a Bleachermark with Benchmarks with semantically different pipelines doesn't make sense
 - So disallow different lengths and different function labels
 - So remove labels from Benchmark and put them on Bleachermark
 - User message: Benchmark is mostly an internal thing. Bleachermark is the core external class.
-
 
 # Logic for running benchmarks
 
@@ -29,6 +28,11 @@
 - What did David do in #20684
 
 # Out-of-the-Box Statistics
+
+- Remove plural 's' from statistics names?
+- Rename stdvs to std?
+- Getters for a specific benchmark? (useful for plotting)
+
 
 #  Other
 - Write setup.py and so on to make this a pip installable package

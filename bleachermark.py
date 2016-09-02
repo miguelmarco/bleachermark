@@ -211,7 +211,7 @@ class Bleachermark:
 
         - ``*args`` - the arguments to be passed to the constructor of the runner.
 
-        - ``**kwargs`` - the ketword arguments to be pased to the constructor of the runner.
+        - ``**kwargs`` - the keyword arguments to be passed to the constructor of the runner.
 
         EXAMPLES::
 
@@ -246,14 +246,17 @@ class Bleachermark:
         # For the moment it just uses the serial runner with the parameter nruns
         # No automatic tweaking, no parallelism, no nothing
         r"""
-        Runs the benchmarks in the collection and stores the returned data
+        Runs the benchmarks in the collection and stores the returned data.
+
+        TODO: Alias of `resume`?
 
         INPUT:
 
         - ``nruns`` - The number of times each
         """
-        runner = SerialRunner(self, nruns)
-        self._current_runner = runner
+        if self._current_runner is None:
+            runner = SerialRunner(self, nruns)
+            self._current_runner = runner
         self.resume()
 
     def resume(self):
@@ -313,8 +316,8 @@ class Bleachermark:
 
         INPUT:
 
-         - ``transposed`` - (default = False), determines weather the data must
-            be transposed
+         - ``transposed`` - (default = False), determines wether the data must
+            be transposed. TODO: Explain what this means.
 
         OUTPUT:
 
@@ -367,6 +370,8 @@ class Bleachermark:
     def stdvs(self):
         r"""
         Return the standard deviations of the timings.
+
+        TODO: Better name?
         """
         variances = self.variances()
         import math
@@ -439,7 +444,7 @@ class Bleachermark:
 class SerialRunner:
     r"""
     Example of Runner. It just runs the each benchmark of the bleachermark as many times as indicated.
-    It most likey will be the default one
+    It most likely will be the default one
     """
     def __init__(self, bleachermark, iterations):
         r"""
