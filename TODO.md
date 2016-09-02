@@ -20,6 +20,7 @@
 - Suggestions?
 - Take a look at https://wiki.python.org/moin/ParallelProcessing.
 - Decouple the SageMath parallel framework into a separate package
+- It should be possible to make a speed plot across different no. of workers
 
 # Interruption and Resume
 
