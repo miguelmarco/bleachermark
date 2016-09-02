@@ -1,3 +1,11 @@
+# Benchmark/Bleachermark design suggestion
+
+- Having a Bleachermark with Benchmarks with semantically different pipelines doesn't make sense
+- So disallow different lengths and different function labels
+- So remove labels from Benchmark and put them on Bleachermark
+- User message: Benchmark is mostly an internal thing. Bleachermark is the core external class.
+
+
 # Logic for running benchmarks
 
 - Current proposal: Runners
