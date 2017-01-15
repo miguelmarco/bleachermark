@@ -1,17 +1,19 @@
+# Johan notes
+
+- The master thread is responsible for handling non-completed runs on
+  interruption: the schedulers will assume that any run that was emitted will
+  (eventually) be run. This allows using specific data instead of "runids" and
+  relying on all of these being eventually run.
+
+- Adaptive strategy := Balance how much time is spent in intervals of doubling sizes.
+
+
 # Benchmark/Bleachermark design
 
 - Having a Bleachermark with Benchmarks with semantically different pipelines doesn't make sense
 - So disallow different lengths and different function labels
 - So remove labels from Benchmark and put them on Bleachermark
 - User message: Benchmark is mostly an internal thing. Bleachermark is the core external class.
-
-# Logic for running benchmarks
-
-- Current proposal: Runners
-
-# Bleachermark as iterator
-
-- Should a Bleachermark have iterator behaviour?
 - If so, should we store the data when a Bleachermark is used as an iterator?
 
 # Parallelism

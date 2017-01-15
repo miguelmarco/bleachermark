@@ -7,52 +7,7 @@ data one wishes to perform statistics on.
 
 EXAMPLE::
 
-    >>> from bleachermark import *
-    >>> import math, random
-    >>> def data_gen(i):
-    ...     random.seed(i)
-    ...     return random.random()
-    >>> def f1(x):
-    ...     return x*x - x
-    >>> pipeline = [data_gen, f1, math.cos, f1, f1, math.sin]
-    >>> B = Benchmark(pipeline, label='benchmark 1')
-    >>> zero_pipeline = [lambda i: i, lambda i: 0]
-    >>> B2 = Benchmark(zero_pipeline, label='stupid benchmark', fun_labels=['identity', 'zero'])
-    >>> BB = Bleachermark((B, B2))
-    >>> BB.run(2)
-    >>> BB.fetch_data("dict")
-    {'benchmark 1': [[0, (1.6000000000016e-05, 0.8444218515250481),
-    (1.0000000000287557e-06, -0.1313735881920577),
-    (8.000000000008e-06, 0.9913828944313534),
-    (0.0, -0.008542851060265422),
-    (0.0, 0.0086158313645033),
-    (0.0, 0.00861572476904337)],
-    [1, (1.0999999999983245e-05, 0.13436424411240122),
-    (1.0000000000287557e-06, -0.11631049401650427),
-    (0.0, 0.9932435564834237),
-    (0.0, -0.006710793987583674),
-    (1.0000000000287557e-06, 0.006755828743527464),
-    (1.0000000000287557e-06, 0.006755777352931481)]],
-    'stupid benchmark': [[0, (1.0000000000287557e-06, 0),
-    (9.999999999177334e-07, 0)],
-    [1, (0.0, 1), (0.0, 0)]]}
-    >>> BB.fetch_data("flat")
-    [('benchmark 1', '0', 0, 1.7000000000044757e-05, 0.8444218515250481),
-    ('benchmark 1', '1', 0, 9.999999999177334e-07, -0.1313735881920577),
-    ('benchmark 1', '2', 0, 6.000000000061512e-06, 0.9913828944313534),
-    ('benchmark 1', '3', 0, 0.0, -0.008542851060265422),
-    ('benchmark 1', '4', 0, 9.999999999177334e-07, 0.0086158313645033),
-    ('benchmark 1', '5', 0, 1.0000000000287557e-06, 0.00861572476904337),
-    ('benchmark 1', '0', 1, 2.8000000000028002e-05, 0.13436424411240122),
-    ('benchmark 1', '1', 1, 1.0000000000287557e-06, -0.11631049401650427),
-    ('benchmark 1', '2', 1, 9.999999999177334e-07, 0.9932435564834237),
-    ('benchmark 1', '3', 1, 1.0000000000287557e-06, -0.006710793987583674),
-    ('benchmark 1', '4', 1, 2.0000000000575113e-06, 0.006755828743527464),
-    ('benchmark 1', '5', 1, 0.0, 0.006755777352931481),
-    ('stupid benchmark', 'identity', 0, 9.999999999177334e-07, 0),
-    ('stupid benchmark', 'zero', 0, 0.0, 0),
-    ('stupid benchmark', 'identity', 1, 0.0, 1),
-    ('stupid benchmark', 'zero', 1, 0.0, 0)]
+    TODO
 """
 
 from time import clock
@@ -70,7 +25,201 @@ def signal_ctrl_c(signal, frame):
 
 signal.signal(signal.SIGINT, signal_ctrl_c)
 
-class Benchmark():
+
+class Scheduler(object):
+    r"""
+    A Scheduler is basically an iterator which returns Benchmark runs.
+
+    A Benchmark is the simplest type of Scheduler which simply infinitely emits
+    a run of this Benchmark.
+    """
+    def __init__(self):
+        self._started_runs = set()
+        self._completed_runs = set()
+
+    def __iter__(self):
+        return self
+
+    def _next(self):
+        # Override this in subclasses
+        raise NotImplemented
+
+    def next(self):
+        r"""
+        Return the next run from this scheduler, or raise a `StopIteration`.
+        """
+        run = self._next()
+        self._started_runs.add(run)
+        return run
+
+    __next__ = next
+
+    def register_completed(self, run, result):
+        r"""
+        Register to this scheduler (and any children) that the given run was completed.
+        """
+        try:
+            self._started_runs.remove(run)
+            self._pass_register_completed(self, run, result)
+            self._completed_runs.add(run)
+        except KeyError:
+            #TODO: How to handle this?
+            raise ValueError("Run was not started by this scheduler (%s) or already completed: %s" % (self, run))
+
+    def _pass_register_completed(self, run, result):
+        r"""
+        Pass a call to `self.register_completed` to any sub-schedulers, and
+        possibly do special handling in relation to register completed.
+        """
+        # Override this in subclasses
+        raise NotImplemented
+
+
+class RunN(Scheduler):
+    r"""
+    Returns at most `n` runs of the input scheduler.
+    """
+    def __init__(self, scheduler, n):
+        self._n = n
+        self._scheduler = scheduler
+        super(RunN, self).__init__()
+
+    def _next(self):
+        if len(self._completed_runs) + len(self._started_runs) >= self._n:
+            raise StopIteration
+        else:
+            return self._scheduler.next()
+
+    def _pass_register_completed(self, run, result):
+        self._scheduler.register_completed(run, result)
+
+
+class AggregateScheduler(Scheduler):
+    r"""
+    Base class for schedulers which aggregate a finite list of schedulers in some way.
+
+    Sub-classes' `_next()` method should return both a run and the scheduler
+    which issued it.
+    """
+    def __init__(self, schedulers):
+        self._schedulers = schedulers
+        self._which_scheduler = dict() # map not-completed-run -> scheduler
+
+    def next(self):
+        r"""
+        Return the next run from this scheduler, or raise a `StopIteration`.
+        """
+        (run, scheduler) = self._next()
+        self._which_scheduler[run] = scheduler
+        self._started_runs.add(run)
+        return run
+
+    def _pass_register_completed(self, run, result):
+        self._which_scheduler[run].register_completed(run, result)
+        del self._which_scheduler[run]
+
+
+
+class Sequential(Scheduler):
+    r"""
+    Run an interable of schedulers in sequence: that is, the first scheduler is
+    completely exhausted before proceeding to the second scheduler.
+
+    The iterable of schedulers can be infinite.
+    """
+    def __init__(self, schedulers):
+        self._current = None
+        super(Sequential, self).__init__(iter(schedulers))
+
+    def _next(self):
+        if self._current is None:
+            self._current = self._schedulers.next()
+        else:
+            try:
+                run = self._current.next()
+                return (run, self._current)
+            except StopIteration:
+                self._current = None
+                return self.next()
+
+
+class BalanceRuns(Scheduler):
+    r"""
+    Run an iterable of schedulers, balancing how many runs each scheduler is run.
+
+    The iterable of schedulers must be finite.
+    """
+    def __init__(self, schedulers):
+        self._next_scheduler = 0
+        self._stop_loop = 0
+        super(BalanceRuns, self).__init__(list(schedulers))
+
+    def _next(self):
+        try:
+            scheduler = self._schedulers[self._next_scheduler]
+            run = scheduler.next()
+            self._next_scheduler = (self._next_scheduler + 1) % len(self._schedulers)
+            return (run, scheduler)
+        except StopIteration:
+            del self._schedulers[self._next_scheduler]
+            if self._next_scheduler == len(self._schedulers):
+                self._next_scheduler = 0
+            if self._schedulers:
+                return self._next()
+            else
+                raise StopIteration
+
+
+
+class BalanceTime(Scheduler):
+    r"""
+    Run an iterable of schedulers, balancing how much time each scheduler is run.
+
+    The iterable of schedulers must be finite.
+
+    TODO: This should use a dynamic priority queue for asymptotically better
+    complexity.
+    """
+    def __init__(self, schedulers):
+        super(BalanceTime, self).__init__(list(schedulers))
+        self._scheduler_issued         = { s : 0  for s in self._schedulers }
+        self._scheduler_completed      = { s : 0  for s in self._schedulers }
+        self._scheduler_completed_time = { s : 0. for s in self._schedulers }
+        self._scheduler_expected_time  = { s : 0. for s in self._schedulers }
+
+    def _update_expected_time(self, scheduler):
+        avg = self._scheduler_completed_time[scheduler] / self._scheduler_completed[scheduler]
+        self._scheduler_expected_time[scheduler] = avg * self._scheduler_issued[scheduler]
+
+    def _next(self):
+        try:
+            #NOTE: self._scheduler contains those schedulers that are not yet
+            #(known to be) finished. The dictionaries have mappings to also old
+            #schedulers, so we should take care that we here only minimise over
+            #the non-empty ones.
+            scheduler = min(self._schedulers, key=lambda s: self._scheduler_timings[s])
+            run = scheduler.next()
+            self._scheduler_issued[scheduler] = self._scheduler_issued[scheduler] + 1
+            self._update_expected_time(scheduler)
+            return (run, scheduler)
+        except StopIteration:
+            del self._schedulers[index]
+            del self._schedulers_timings[index]
+            if self._schedulers:
+                return self._next()
+            else
+                raise StopIteration
+
+    def _pass_register_completed(self, run, result):
+        scheduler = self._which_scheduler[run]
+        self._scheduler_completed[scheduler] = self._scheduler_completed[scheduler] + 1
+        self._scheduler_completed_time[scheduler] = self._scheduler_completed_time[scheduler] + result["total_time"]
+        self._update_expected_time(scheduler)
+        super(BalanceTime, self)._pass_register_completed(run, result)
+
+
+
+class Benchmark(Scheduler):
     r"""
     A Benchmark is a pipeline of functions.
 
