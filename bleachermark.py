@@ -199,7 +199,7 @@ class BalanceTime(Scheduler):
             #the non-empty ones.
             scheduler = min(self._schedulers, key=lambda s: self._scheduler_timings[s])
             run = scheduler.next()
-            self._scheduler_issued[scheduler] = self._scheduler_issued[scheduler] + 1
+            self._scheduler_issued[scheduler] += 1
             self._update_expected_time(scheduler)
             return (run, scheduler)
         except StopIteration:
@@ -212,8 +212,8 @@ class BalanceTime(Scheduler):
 
     def _pass_register_completed(self, run, result):
         scheduler = self._which_scheduler[run]
-        self._scheduler_completed[scheduler] = self._scheduler_completed[scheduler] + 1
-        self._scheduler_completed_time[scheduler] = self._scheduler_completed_time[scheduler] + result["total_time"]
+        self._scheduler_completed[scheduler] += 1
+        self._scheduler_completed_time[scheduler] += result.total_time()
         self._update_expected_time(scheduler)
         super(BalanceTime, self)._pass_register_completed(run, result)
 
@@ -221,34 +221,24 @@ class BalanceTime(Scheduler):
 
 class Benchmark(Scheduler):
     r"""
-    A Benchmark is a pipeline of functions.
-
+    A Benchmark is a pipeline of functions which can be run.
+    As a Scheduler, it omits runs for itself indefinitely.
     """
-    def __init__(self, pipeline, label=None, fun_labels = None):
+    def __init__(self, pipeline, label):
         r"""
         Initializes the Benchmark
 
         INPUT:
 
-        -  ``l`` - the list of functions in the Benchmark.
+        -  `pipeline` - the list of functions in the Benchmark.
 
-        - ``label`` - the name of the benchmark.
+        - `label` - A name or ID for this benchmark.
 
-        - ``fun_labels`` - the names of the functions. If it is nit given,
-          they will be named by their index.
         """
-        if not isinstance(pipeline, (list, tuple)):
-            raise TypeError("Pipeline must be a list or tuple of functions")
         self._pipeline = tuple(pipeline)
         self._label = label
-        if fun_labels is None:
-            self._fun_labels = tuple(str(i) for i in range(len(self._pipeline)))
-        else:
-            if not isinstance(fun_labels, (list, tuple)):
-                raise TypeError("The labels of the functions must be given in a list or tuple")
-            if len(fun_labels) != len(self._pipeline):
-                raise ValueError("There must be as many labels as functions")
-            self._fun_labels = tuple(fun_labels)
+        super(Benchmark, self).__init__()
+        self._runid = 0
 
     def __repr__(self):
         if self.label():
@@ -262,14 +252,8 @@ class Benchmark(Scheduler):
         """
         return self._label
 
-    def _set_label(self, label):
+    def set_label(self, label):
         self._label = label
-
-    def function_labels(self):
-        r"""
-        Return the functions' labels for this benchmark.
-        """
-        return self._fun_labels
 
     def pipeline(self):
         r"""
@@ -277,30 +261,38 @@ class Benchmark(Scheduler):
         """
         return self._pipeline
 
-    def run(self, i):
+    def _next(self):
+        r"""
+        For the Scheduler interface
+        """
+        return (self._label, self._next_runid())
+
+    def _next_runid():
+        runid = self._runid
+        self._runid += 1
+        return runid
+
+    def run(self, runid):
         r"""
         Run the pipeline and return the timings and values produced.
 
         INPUT:
 
-        - ``i`` - The input fed to the first element of the pipeline. Typically
-                  an identifier of the running instance.
+        - `runid` - An identifier numbering the run. This is intended only for
+                    e.g. setting a random seed. Possibly ignore it.
 
         OUTPUT:
 
-        - A list  whose first element is the input passed to the first function
-          of the pipeline. The rest of the elements are pairs, with one pair for
-          each part of the pipeline. The first element of each pair is the time
-          that this part of the pipeline took, and the second is the value it output.
+        - A Result object for the timing results.
         """
-        time_vals = [i]
-        intervalue = i
+        result = Result(self, runid)
+        data = runid
         for fun in self._pipeline:
-            tim = clock()
-            intervalue = fun(intervalue)
-            time_vals.append( (clock()-tim,  intervalue) )
-        return time_vals
-
+            before = clock()
+            data = fun(data)
+            elapsed = clock() - before
+            result.log_pipeline(data, elapsed)
+        return result
 
 
 def _make_autolabel(n):
@@ -310,6 +302,26 @@ def _make_autolabel(n):
     return "[%s]" % n
 
 _autolabel_regex = r"\[[0-9]*\]"
+
+
+
+class Result(object):
+
+    def __init__(self, benchmark, runid):
+        self._benchmark = benchmark
+        self._runid = runid
+        self._data = [ ]
+        self._timings = [ ]
+
+    def log_pipeline(self, data, elapsed):
+        self._data.append(data)
+        self._timings.append(elapsed)
+
+    def total_time(self):
+        return sum(self._timings)
+
+
+
 
 
 class Bleachermark:
