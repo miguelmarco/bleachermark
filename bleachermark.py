@@ -12,6 +12,7 @@ EXAMPLE::
 
 from time import clock
 from copy import copy
+import itertools
 
 #This part handles the ctrl-c interruption.
 #class CTRLC(Exception):
@@ -74,15 +75,40 @@ class Scheduler(object):
         # Override this in subclasses
         raise NotImplemented
 
+    def benchmarks(self):
+        r"""
+        The list of benchmarks covered by this Scheduler.
+        """
+        # Override this in subclasses
+        raise NotImplemented
 
-class RunN(Scheduler):
+
+class AlterScheduler(Scheduler):
+    r"""
+    Scheduler which alters the behaviour of a single sub-scheduler.
+    """
+    def __init__(self, scheduler):
+        self._scheduler = scheduler
+        super(ModulateScheduler, self).__init__()
+
+    def _pass_register_completed(self, run, result):
+        self._scheduler.register_completed(run, result)
+
+    def benchmarks(self):
+        r"""
+        The list of benchmarks covered by this Scheduler.
+        """
+        return self._scheduler.benchmarks()
+
+
+
+class RunN(AlterScheduler):
     r"""
     Returns at most `n` runs of the input scheduler.
     """
     def __init__(self, scheduler, n):
         self._n = n
-        self._scheduler = scheduler
-        super(RunN, self).__init__()
+        super(RunN, self).__init__(scheduler)
 
     def _next(self):
         if len(self._completed_runs) + len(self._started_runs) >= self._n:
@@ -90,8 +116,6 @@ class RunN(Scheduler):
         else:
             return self._scheduler.next()
 
-    def _pass_register_completed(self, run, result):
-        self._scheduler.register_completed(run, result)
 
 
 class AggregateScheduler(Scheduler):
@@ -104,6 +128,7 @@ class AggregateScheduler(Scheduler):
     def __init__(self, schedulers):
         self._schedulers = schedulers
         self._which_scheduler = dict() # map not-completed-run -> scheduler
+        super(AggregateScheduler, self).__init__()
 
     def next(self):
         r"""
@@ -117,6 +142,12 @@ class AggregateScheduler(Scheduler):
     def _pass_register_completed(self, run, result):
         self._which_scheduler[run].register_completed(run, result)
         del self._which_scheduler[run]
+
+    def benchmarks(self):
+        r"""
+        The list of benchmarks covered by this Scheduler.
+        """
+        return list(itertools.chain_from_iterable(s.benchmarks() for s in self._schedulers))
 
 
 
@@ -223,6 +254,8 @@ class Benchmark(Scheduler):
     r"""
     A Benchmark is a pipeline of functions which can be run.
     As a Scheduler, it omits runs for itself indefinitely.
+
+    TODO: Implement optional input argument
     """
     def __init__(self, pipeline, label):
         r"""
@@ -263,7 +296,7 @@ class Benchmark(Scheduler):
 
     def _next(self):
         r"""
-        For the Scheduler interface
+        For the Scheduler interface.
         """
         return (self._label, self._next_runid())
 
@@ -322,31 +355,55 @@ class Result(object):
 
 
 
+class Dispatcher(object):
+
+    def __init__(self, bleachermark):
+        self._bleachermark = bleachermark
+
+
+class SimpleDispatcher(Dispatcher):
+
+    def __init__(self, bleachermark):
+        super(SimpleDispatcher, self).__init__(bleachermark)
+
+        
 
 
 class Bleachermark:
-    def __init__(self, benchmarks):
+
+    def __init__(self, work):
         r"""
         INPUT:
 
-        - ``benchmarks`` - A benchmark, or a list or tuple of them
-        """
-        if isinstance(benchmarks, Benchmark):
-            self._benchmarks = (benchmarks, )
-        elif isinstance(benchmarks, (list, tuple)) and all([isinstance(i, Benchmark) for i in benchmarks]):
-            self._benchmarks = tuple(benchmarks)
-        elif isinstance(benchmarks, (list, tuple)) and all([isinstance(i, (list, tuple)) for i in benchmarks]):
-            self._benchmarks = tuple(Benchmark(i) for i in benchmarks)
-        else:
-            self._benchmarks = (Benchmark(benchmarks),)
+        - ``work`` - A scheduler or list/tuple of benchmarks. A benchmark can be
+          given as a Benchmark object or simply as a list/tuple of
+          functions i.e. the pipeline. Also accepts a single Benchmark object.
 
-        for n, b in zip(range(self.size()), self._benchmarks):
-            if b.label() is None:
-                b._set_label(_make_autolabel(n))  # WARNING!!! This could have side effects if the same benchmark is in more than one bleachermark!!!
-        # benchmark label -> ((timing, value) list) list
-        # (time, value) = self._measurements[bm.label()][run_no][pipeline_part]
+        TODO: Currently does not work with infinite lists of benchmarks.
+        """
+        if isinstance(work, Scheduler):
+            self._scheduler = work
+            self._benchmarks = self._scheduler.benchmarks()
+        if isinstance(work, Benchmark):
+            self._benchmarks = (work, )
+            self._scheduler = work
+        elif isinstance(benchmarks, (list, tuple)):
+            bs = []
+            for (n, b) in zip(range(len(benchmarks)), benchmarks):
+                if isinstance(b, Benchmark ):
+                    bs.append(b)
+                elif isinstance(b, (list, tuple)):
+                    bs.append(Benchmark(*b, label=_make_autolabel(n)))
+                else:
+                    raise ValueError("The input benchmarks must be Benchmarks or lists")
+            self._benchmarks = tuple(bs)
+            self._scheduler = BalanceRuns(self._benchmarks)
+        else:
+            raise ValueError("The input must be a benchmark or a list of them.")
+
+        #TODO: Use convenient optional arguments to build the most common schedulers.
+        self._dispatcher = SimpleDispatcher(self)
         self.clear()
-        self._current_runner = None
 
     def __repr__(self):
         return 'Collection of {} benchmarks'.format(self.size())
@@ -354,71 +411,32 @@ class Bleachermark:
     def size(self):
         return len(self._benchmarks)
 
-    def __iter__(self):   # Implement iterator behaviour
-        return self
+    #TODO: Implement iterator behaviour?
+    # def __iter__(self):   # Implement iterator behaviour
+    #     return self
+    # def next(self):      # Should we store the result?
+    #     return self._current_runner.next()
+    # __next__ = next
 
-    def next(self):      # Should we store the result?
-        return self._current_runner.next()
+    #TODO: Ability to change scheduler in the middle?
+    # The individual benchmarks know inside themselves (since they inherit from
+    # Scheduler) how many runs have been completed for them. So in principle
+    # it's possible.
 
-    __next__ = next
-
-    def set_runner(self, runner, *args, **kwargs):
-        r"""
-        Set the runner to be used when the bleachermark is used as an iterator:
-
-        INPUT:
-
-        - ``runner`` - the constructor of the runner to be set.
-
-        - ``*args`` - the arguments to be passed to the constructor of the runner.
-
-        - ``**kwargs`` - the keyword arguments to be passed to the constructor of the runner.
-
-        EXAMPLES::
-
-            >>> from bleachermark import *
-            >>> import math, random
-            >>> def data_gen(i):
-            ...     random.seed(i)
-            ...     return random.random()
-            >>> def f1(x):
-            ...     return x*x - x
-            >>> pipeline = [data_gen, f1, math.cos]
-            >>> B = Benchmark(pipeline, label='benchmark 1')
-            >>> zero_pipeline = [lambda i: i, lambda i: 0]
-            >>> B2 = Benchmark(zero_pipeline, label='stupid benchmark', fun_labels=['identity', 'zero'])
-            >>> BB = Bleachermark((B, B2))
-            >>> BB.set_runner(SerialRunner, 100)
-            >>> BB.next()
-            (0, (0, (2.2999999999884224e-05, 0.8444218515250481),
-              (2.0000000000575113e-06, -0.1313735881920577),
-              (2.9999999999752447e-06, 0.9913828944313534)))
-            >>> BB.next()
-            (1, (0, (3.999999999892978e-06, 0), (2.9999999999752447e-06, 0)))
-
-        This way, the bleachermark can be used as part of a bigger pipeline (for instance,
-        feeding output to another engine that makes statistical analyisis, or plots.
-        """
-        runner = runner(self, *args, **kwargs)
-        self._current_runner = runner
-
-    def run(self, nruns = 100): # Refactored to the runnners model
-        # This function should create a runner according to the passed parameters and run it
-        # For the moment it just uses the serial runner with the parameter nruns
-        # No automatic tweaking, no parallelism, no nothing
+    def run(self):
         r"""
         Runs the benchmarks in the collection and stores the returned data.
 
         TODO: Alias of `resume`?
 
-        INPUT:
-
-        - ``nruns`` - The number of times each
+        TODO: The Bleachermark (or the Dispatcher) is responsible for finishing
+        off uncompleted runs when resuming after an interrupt. The Schedulers
+        will never return the same run again.
         """
-        if self._current_runner is None:
-            runner = SerialRunner(self, nruns)
-            self._current_runner = runner
-        self.resume()
+        for run in self._scheduler:
+            self._dispatcher.dispatch(run)
+
+    #Johan TODO: I got till this point in refactoring.
 
     def resume(self):
         r"""
