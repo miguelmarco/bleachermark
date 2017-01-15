@@ -36,7 +36,7 @@ discover the results during computation and to respond to this by changing your
 approach.
 
 
-### Benchmarking an algorithm
+### Benchmarking an algorithm on random data
 
 You have an algorithm that you wish to speed test? Just type the following in a
 Python or IPython shell:
@@ -117,7 +117,7 @@ later reference. No biggie:
     B.run() # runs the entire pipeline 100 times and saves everything
 
  
-### Finding the cut-off point between basic case and recursive case insehD&C algorithms
+### Finding the cut-off point between basic case and recursive case in D&C algorithms
 
 A classical example for this is Karatsuba multiplication: an ingenious recursive
 step allows multiplying two large integers by 3 multiplications (and some
@@ -147,19 +147,33 @@ classical fashion:
     B.run()
 
 
+### Benchmarking an algorithm on a specific data set
 
-### Use Bleachermark's parallelisation etc. to find a Needle in a Haystack
+You have an algorithm that you wish to run over a specific data set:
+
+    data_set = [ (i,j,k) for i in range(10) for j in range(20) for k in range(30) ]
+    def my_algo(input):
+         ....
+    B = Bleachermark([ Benchmark([my_algo], input=data_set) ])
+    B.run() # runs the function on the entire data set
+
+
+
+
+
+### Finding a Needle in a Haystack
 
 You seek an input to your function `f` which makes `f` return `True`, but you
-have no idea what this input could be:
+have no idea what this input could be. You wish to break the search when you
+find a result:
 
     search_space = ( (i,j,k) for i in range(1000) for j in range(1000) for k in range(1000) )
     def f(input):
         return ...
-    N = NeedleInHaystack(f, search_space)
-    N.run()
+    B = Bleachermark([ NeedleInHaystack(my_algo, data_set) ], record = minimal)
+    B.run()
     (35, 46, 341)
 
-`NeedleInHaystack` takes many of the same arguments as `Bleachermark`, such as
-`parallel, ssh, shuffle`, etc.
-
+Technically, `NeedleInHaystack` is a subclass of `Benchmark`, acting as a
+`Benchmark` with the specified `input` data set, but which stops to emit further
+runs once an input where the function outputs a non-`None` value.
