@@ -166,7 +166,7 @@ class BalanceRuns(Scheduler):
                 self._next_scheduler = 0
             if self._schedulers:
                 return self._next()
-            else
+            else:
                 raise StopIteration
 
 
@@ -207,7 +207,7 @@ class BalanceTime(Scheduler):
             del self._schedulers_timings[index]
             if self._schedulers:
                 return self._next()
-            else
+            else:
                 raise StopIteration
 
     def _pass_register_completed(self, run, result):
