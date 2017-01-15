@@ -24,75 +24,142 @@ Three classes:
 
   - time
 
-## Usage:
+## User Stories:
 
-Right now, the intended use case is the following:
+Essentially, BleacherMark just runs some functions for you, for a certain number
+of iterations or until you don't want to wait more. Computation results,
+possibly also intermediate values, and timing data is collected.
 
-- The user creates his benchmarks, by passing a pipeline of functions. Optionally labels can be assigned.
-- The bleachermark object is created from the benchmarks
-- Then the bleachermark can be told to run the benchmarks and store the information generated. By default
-it uses the SerialRunner, that runs the becnhmarks sequentially as many times as told; but other runner can be implemented.
-    - After being run, the bleachermark can give the stored data, and also compute basic statistics on it.
-- Another option to run the beleachermark is to set a runner, and then use it as an iterator that returns the results of the benchmarks
+The clever thing about BleacherMark is that it allows you to do this in many,
+many ways, in parallel on your own or many machines, and it allows you to
+discover the results during computation and to respond to this by changing your
+approach.
 
-Here we see an example of using the bleachermark in the first mode (store the data):
 
-    >>> pipeline1 = [lambda i: (i*i, i+1), lambda (a, b): a+b]
-    >>> pipeline2 = [lambda i: i, lambda i: 0]
-    >>> B1 = Benchmark(pipeline1, label='benchmark 1')
-    >>> B2 = Benchmark(pipeline2, label='benchmark 2', fun_labels=['identity', 'zero'])
-    >>> B = Bleachermark((B1, B2))
-    >>> B.run(3)
-    >>> B.fetch_data()   # fetch all the data
-    {'benchmark 1': [[(1.9999999993913775e-06, (0, 1)),
-    (1.000000000139778e-06, 1)],
-    [(1.000000000139778e-06, (1, 2)), (0.0, 3)],
-    [(1.000000000139778e-06, (4, 3)), (0.0, 7)]],
-    'benchmark 2': [[(2.9999999995311555e-06, 0), (0.0, 0)],
-    [(3.000000000419334e-06, 1), (1.000000000139778e-06, 0)],
-    [(2.000000000279556e-06, 2), (0.0, 0)]]}
-    >>> B.fetch_data(format='flat')  #  We can ask for a format that is better suited for pandas
-    [('benchmark 1', '0', 0, 1.9999999993913775e-06, (0, 1)),
-    ('benchmark 1', '1', 0, 1.000000000139778e-06, 1),
-    ('benchmark 1', '0', 1, 1.000000000139778e-06, (1, 2)),
-    ('benchmark 1', '1', 1, 0.0, 3),
-    ('benchmark 1', '0', 2, 1.000000000139778e-06, (4, 3)),
-    ('benchmark 1', '1', 2, 0.0, 7),
-    ('benchmark 2', 'identity', 0, 2.9999999995311555e-06, 0),
-    ('benchmark 2', 'zero', 0, 0.0, 0),
-    ('benchmark 2', 'identity', 1, 3.000000000419334e-06, 1),
-    ('benchmark 2', 'zero', 1, 1.000000000139778e-06, 0),
-    ('benchmark 2', 'identity', 2, 2.000000000279556e-06, 2),
-    ('benchmark 2', 'zero', 2, 0.0, 0)]
-    >>> B.timimgs()   #  Just ask for the timings
-    {'benchmark 1': [[1.9999999993913775e-06, 1.000000000139778e-06],
-    [1.000000000139778e-06, 0.0],
-    [1.000000000139778e-06, 0.0]],
-    'benchmark 2': [[2.9999999995311555e-06, 0.0],
-    [3.000000000419334e-06, 1.000000000139778e-06],
-    [2.000000000279556e-06, 0.0]]}
-    >>> B.averages()  # and then ask for basic statistics
-    {'benchmark 1': [1.3333333332236446e-06, 3.33333333379926e-07],
-    'benchmark 2': [2.6666666667433483e-06, 3.33333333379926e-07]}
-    >>> B.stdvs()  # the standard deviations
-    {'benchmark 1': [4.7140452043823233e-07, 4.7140452085692363e-07],
-    'benchmark 2': [4.71404520647578e-07, 4.7140452085692363e-07]}
-    
-An example of using the bleachermark as an iterator:
+### Benchmarking an algorithm
 
-    >>> pipeline1 = [lambda i: (i*i, i+1), lambda (a, b): a+b]
-    >>> pipeline2 = [lambda i: i, lambda i: 0]
-    >>> B1 = Benchmark(pipeline1, label='benchmark 1')
-    >>> B2 = Benchmark(pipeline2, label='benchmark 2', fun_labels=['identity', 'zero'])
-    >>> B = Bleachermark((B1, B2))
-    >>> B.set_runner(SerialRunner, 10)  # we tell the benchmark to use the serial runnerm with 10 iterations
-    >>> B.next() # Then we can iterate over it
-    ([(4.999999999810711e-06, (1, 2)), (5.999999999950489e-06, 3)], 0)
-    >>> B.next()
-    ([(1.000000000139778e-06, 0), (2.9999999995311555e-06, 0)], 1)
+You have an algorithm that you wish to speed test? Just type the following in a
+Python or IPython shell:
 
-    
+    def data_gen():
+         return some_random_data
+    def my_algo(input):
+         ....
+    B = Bleachermark([ (data_gen, my_algo) ], N =  1000)
+    B.run() # runs the function 1000 times
 
-    
 
+OK, so you wish to know how speed of the algorithm changes with the size of the
+data? No problem:
+
+    def data_gen(size):
+         return lambda (): some_random_data_of_size(size)
+    def my_algo(input):
+         ....
+    B = Bleachermark([ (data_gen(size), my_algo) for size in range(1, 100) ], N = 100)
+    B.run() # runs the function 100 times for each size
+
+
+Ah, but the above will spend a lot more time on the big sizes than on the
+smaller sizes. To even this out, we have an **adaptive** strategy:
+
+    B = Bleachermark([ (data_gen(size), my_algo) for size in range(1, 100) ], adaptive = True, time=60 * 60)
+    B.run() # run the function on sizes adaptively for 1 hour.
+
+Oh, but after 15 minutes you get bored and wish to inspect the result? Just go
+ahead and interrupt:
+
+    <Press Ctrl-c to interrupt computation>
+    B.result_overview()
+    <blah blah>
+    B.run() # continues running
+
+In fact, back when defining `B`, we didn't even need to set a `time` argument:
+
+    B = Bleachermark([ (data_gen(size), my_algo) for size in range(1, 100) ], adaptive = True)
+    B.run() # run the function on sizes adaptively until it's interrupted
+    <When you get bored, interrupt using Ctrl-C and inspect the results>
+
+
+### Pitting two algorithms against each other
+
+    def data_gen():
+         return some_random_data
+    def algo1(input):
+         ....
+    def algo2(input):
+         ....
+    B = Bleachermark([ (data_gen(size), algo1, name="algo1 %s" % size) for size in range(1, 100) ]
+                   + [ (data_gen(size), algo2, name="algo2 %s" % size) for size in range(1, 100) ], N = 100)
+    B.run() # runs both algorithms 100 times on each size
+    g1 = B.plot_speeds([ "algo1 %s" % size for size in range(1,100) ])
+    g2 = B.plot_speeds([ "algo2 %s" % size for size in range(1,100) ])
+    show(g1 + g2) # requires Sage
+
+
+### Observing multiple steps
+
+You have a multi-step algorithm and wish to observe the performance of all the
+steps? Or perhaps randomness is introduced not only in the beginning but also
+the middle of a computation, and you wish to save all the random values for
+later reference. No biggie:
+
+    def data_gen():
+
+    def prepare(data):
+        return ...
+    def rough_solution(data):
+        return ...
+    def optimize(data):
+        return ...
+    def pipeline = [ data_gen, prepare, rough_solution, optimize ]
+    B = Bleachermark(pipeline, N = 100)
+    B.run() # runs the entire pipeline 100 times and saves everything
+
+ 
+### Finding the cut-off point between basic case and recursive case insehD&C algorithms
+
+A classical example for this is Karatsuba multiplication: an ingenious recursive
+step allows multiplying two large integers by 3 multiplications (and some
+additions) of smaller integers. A good implementation needs to choose when the
+smaller multiplications should be done by Karatsuba recursively, or in a
+classical fashion:
+
+    def multiply(cutoff):
+        r"""Return a Karatsuba multiplication function with set cutoff point"""
+        def karatsuba(a, b):
+            r"""Multiply a and b using Karatsuba"""
+            def _karatsuba_rec(a, b, k):
+                if k < cutoff:
+                    return a * b   #classical multiplication
+                else:
+                    k = ceil(k/2)
+                    a1, a2 = split_bits(a, k)
+                    b1, b2 = split_bits(b, k)
+                    A = mult_karatsuba(a1, b1)
+                    B = mult_karatsuba(a2, b2)
+                    C = mult_karatsuba(a1 + a2, b1 + b2)
+                    return A + shift(C - A - B, k) + shift(B, 2*k)
+            return _karatsuba_rec(a, b, max(bitlen(a), bitlen(b)))
+        return karatsuba
+
+    B = Bleachermark(lambda cutoff: [ gen_100_bit_numbers, multiply(cutoff) ], adaptive=True)
+    B.run()
+
+
+
+### Use Bleachermark's parallelisation etc. to find a Needle in a Haystack
+
+You seek an input to your function `f` which makes `f` return `True`, but you
+have no idea what this input could be:
+
+    search_space = ( (i,j,k) for i in range(1000) for j in range(1000) for k in range(1000) )
+    def f(input):
+        return ...
+    N = NeedleInHaystack(f, search_space)
+    N.run()
+    (35, 46, 341)
+
+`NeedleInHaystack` takes many of the same arguments as `Bleachermark`, such as
+`parallel, ssh, shuffle`, etc.
 
