@@ -29,6 +29,8 @@ signal.signal(signal.SIGINT, signal_ctrl_c)
 
 class Scheduler(object):
     r"""
+    Abstract base class for Schedulers.
+
     A Scheduler is basically an iterator which returns Benchmark runs.
 
     A Benchmark is the simplest type of Scheduler which simply infinitely emits
@@ -85,7 +87,7 @@ class Scheduler(object):
 
 class AlterScheduler(Scheduler):
     r"""
-    Scheduler which alters the behaviour of a single sub-scheduler.
+    Abstract scheduler which alters the behaviour of a single sub-scheduler.
     """
     def __init__(self, scheduler):
         self._scheduler = scheduler
@@ -120,7 +122,8 @@ class RunN(AlterScheduler):
 
 class AggregateScheduler(Scheduler):
     r"""
-    Base class for schedulers which aggregate a finite list of schedulers in some way.
+    Abstract base class for schedulers which aggregate a finite list of
+    schedulers in some way.
 
     Sub-classes' `_next()` method should return both a run and the scheduler
     which issued it.
@@ -153,10 +156,14 @@ class AggregateScheduler(Scheduler):
 
 class Sequential(Scheduler):
     r"""
-    Run an interable of schedulers in sequence: that is, the first scheduler is
+    Run an iterable of schedulers in sequence: that is, the first scheduler is
     completely exhausted before proceeding to the second scheduler.
 
     The iterable of schedulers can be infinite.
+
+    TODO: This class seems not to have been properly updated to use
+    `AggregateScheduler`, nor does it comply to the current version of
+    `Scheduler`.
     """
     def __init__(self, schedulers):
         self._current = None
@@ -174,7 +181,7 @@ class Sequential(Scheduler):
                 return self.next()
 
 
-class BalanceRuns(Scheduler):
+class BalanceRuns(AggregateScheduler):
     r"""
     Run an iterable of schedulers, balancing how many runs each scheduler is run.
 
@@ -202,7 +209,7 @@ class BalanceRuns(Scheduler):
 
 
 
-class BalanceTime(Scheduler):
+class BalanceTime(AggregateScheduler):
     r"""
     Run an iterable of schedulers, balancing how much time each scheduler is run.
 
@@ -210,6 +217,12 @@ class BalanceTime(Scheduler):
 
     TODO: This should use a dynamic priority queue for asymptotically better
     complexity.
+
+    TODO: The balancing here could use more care: currently for instance, at the
+    beginning in a parallel computation, the same scheduler will be asked P
+    times if P is the number of processors, instead of filling with P different
+    schedulers to begin with. This is because _scheduler_expected_time is 0 as
+    long as no runs have completed yet.
     """
     def __init__(self, schedulers):
         super(BalanceTime, self).__init__(list(schedulers))
@@ -224,11 +237,11 @@ class BalanceTime(Scheduler):
 
     def _next(self):
         try:
-            #NOTE: self._scheduler contains those schedulers that are not yet
+            #NOTE: self._schedulers contains those schedulers that are not yet
             #(known to be) finished. The dictionaries have mappings to also old
             #schedulers, so we should take care that we here only minimise over
             #the non-empty ones.
-            scheduler = min(self._schedulers, key=lambda s: self._scheduler_timings[s])
+            scheduler = min(self._schedulers, key=lambda s: self._scheduler_expected_time[s])
             run = scheduler.next()
             self._scheduler_issued[scheduler] += 1
             self._update_expected_time(scheduler)
@@ -253,7 +266,7 @@ class BalanceTime(Scheduler):
 class Benchmark(Scheduler):
     r"""
     A Benchmark is a pipeline of functions which can be run.
-    As a Scheduler, it omits runs for itself indefinitely.
+    As a Scheduler, it emits runs for itself indefinitely.
 
     TODO: Implement optional input argument
     """
