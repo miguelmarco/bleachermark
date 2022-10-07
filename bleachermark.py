@@ -55,7 +55,12 @@ EXAMPLE::
     ('stupid benchmark', 'zero', 1, 0.0, 0)]
 """
 
-from time import clock
+# Support both Python 2 (using clock) and Python 3 (using perf_counter)
+try:
+    from time import perf_counter
+except (ImportError, AttributeError):
+    from time import clock as perf_counter
+
 from copy import copy
 
 #This part handles the ctrl-c interruption.
@@ -147,9 +152,9 @@ class Benchmark():
         time_vals = [i]
         intervalue = i
         for fun in self._pipeline:
-            tim = clock()
+            tim = perf_counter()
             intervalue = fun(intervalue)
-            time_vals.append( (clock()-tim,  intervalue) )
+            time_vals.append( (perf_counter()-tim,  intervalue) )
         return time_vals
 
 
@@ -308,7 +313,7 @@ class Bleachermark:
                         data.append( (label, fun_labels[i], run[0], m[0], m[1]) )
             return data
         else:
-            raise ValueError("Invalid argument to format: %s".format(format))
+            raise ValueError(f"Invalid argument to format: {format}")
 
     def timings(self, transposed=False):
         r"""
@@ -344,11 +349,8 @@ class Bleachermark:
 
         """
         timings = self.timings(transposed=True)
-        res = {}
-        for bm in timings.keys():
-            totals = map(lambda a: sum(a)/len(a), timings[bm])
-            res[bm] = totals
-        return res
+        return {bm: [sum(t)/len(t) for t in timings[bm]]
+                for bm in timings.keys() }
 
     def variances(self):
         r"""
@@ -375,21 +377,24 @@ class Bleachermark:
         """
         variances = self.variances()
         import math
-        return {bm:map(math.sqrt, variances[bm]) for bm in variances}
+        return {bm: [math.sqrt(v) for v in variances[bm]]
+                for bm in variances}
 
     def maxes(self):
         r"""
         Return the maximum running times of the benchmarks run.
         """
         timings = self.timings(transposed=True)
-        return {bm:map(max, timings[bm]) for bm in timings}
+        return {bm: [max(t) for t in timings[bm]]
+                for bm in timings}
 
     def mins(self):
         r"""
         Return the minimum running times of the benchmarks run.
         """
         timings = self.timings(transposed=True)
-        return {bm:map(min, timings[bm]) for bm in timings}
+        return {bm: [min(t) for t in timings[bm]]
+                for bm in timings}
 
     def pipeline_data(self):
         r"""
